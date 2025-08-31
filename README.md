@@ -1,44 +1,40 @@
-# zerowriter
-
 important update: raspberry pi OS has changed GPIO support, so it is important you use archived versions of the OS: https://github.com/zerowriter/zerowriter1/issues/26#issuecomment-2466903737
 
-----------
+THIS BRANCH IS FOR REV 2.2 DISPLAYS.
 
-Zerowriter Ink (all-in-one device) is now available: https://www.crowdsupply.com/zerowriter/zerowriter-ink
-
-Interest form / survey for potential future products: https://forms.gle/8dZwQsYdUa9X49WCA 
-----------
-
-Yo! Check the back of your 4.2" waveshare e-Paper. If it says Rev2.2 or has a V2 sticker, you'll want to use this branch: 
-
-https://github.com/zerowriter/zerowriter1/tree/waveshare_2.2
-The waveshare_2.2 branch is built specifically for the v2 displays. The main branches won't function properly on these displays. Going forward, this will likely be the default branch for the project.
-
-If it says Rev2.1, you'll want to use these branches:
-
-https://github.com/zerowriter/zerowriter1/tree/main_full
-The main_full branch has a bunch of updates and includes a lot of new features.
-
-This main branch will be discontinued and not further developed.
-I am leaving it as-is because some people may want the simple typewriter with no extra software features. And it is a small codebase.
-
-----------
+# zerowriter
 
 An easy, DIY eink typewriter running on a raspberry pi zero. Perfect for beginners.
-
-This project is open-source. Do whatever you want with it. Please note the display drivers and waveshare code belongs to them. But buy their displays, they rock.
-
-Credit to: https://penkesu.computer/ for the original project that inspired this.
-
 Components list: https://github.com/zerowriter/zerowriter1/blob/main/componentslist
 
-pi zero setup steps: https://github.com/zerowriter/zerowriter1/blob/main/how-to-setup-your-pi
+Setup: https://github.com/zerowriter/zerowriter1/blob/waveshare_2.2/setup_2.2
+
+NOTE: There is a known bug which may cause your pi zero to lose wifi connection after the first boot / setup. In this case, you need to connect your pi to HDMI and reconfigure wifi in sudo raspi-config and then you will be good to go again. This only needs to be done once. This bug is because of the network controller in the zerowriter software which lets you join wifi networks (like a regular computer).
+
+----------
+This branch merges jacobsmith's update with the fixed driver for the rev 2.2 waveshare display. This branch does not yet support the rev 2.1 (original) display.
+
+This branch will replace the main branch as the codebase is much more feature complete. The 2.2 display will be "THE" supported 4.2" display going forward, as the 2.1 display is not beign manufactured anymore.
+
+NEW: Program Features
+- light weight python typewriter
+- works with any USB keyboard
+- KEYMAPS file  to edit key maps if you don't want to program your keyboard's firmware
+- files save in the /data directory where the program resides
+- autosaves the cache every time return is pressed
+- CTRL R forces screen refresh, handy for catching eink bugs
+- CTRL S (quicksave) saves the cache to a txt file
+- CTRL N starts a new file
+- CTRL G sends a gmail to yourself if configured
+- Save As: save a file with a unique name instead of the quicksave
+- File browser: load previous files to continue, or press CTRL+BACKSPACE to delete. Deleted files are just moved to the Archive folder 
+- Server: you can access your files from your browser via local webserver
+- Wi Fi manager: you can find and join local networks. Currently only supports password protected networks.
+- Arrow keys can be used to navigate through and review previous writing -- no editing.
 
 ----------
  
-The e-Paper directory is modified waveshare drivers. All waveshare code belongs to them. Great company, buy their gadgets!
-
-Use this modified code at your own risk. The modified driver may cause damage to your display. Don't blame me.
+The e-Paper directory is modified waveshare drivers. All waveshare code belongs to them. Great company, buy their gadgets! Use this modified code at your own risk. The modified driver may cause damage to your display. Don't blame me.
 
 I have included .STL files for the enclosure I have been using. Feel free to use them however you want.
 
@@ -46,63 +42,27 @@ I have included .STL files for the enclosure I have been using. Feel free to use
 
 How it works:
 
-Inside the e-Paper directory, I built an application on top of the example code from waveshare. You can find it in e-Paper/RaspberryPiJetsonNano/python/examples main.py
+Inside the e-Paper directory, I built an application on top of the example code from waveshare. You can find it in e-Paper/RaspberryPiJetsonNano/python/examples main.py. jacobsmith built some more features in, and I have adopted them in to the codebase and built them out further.
 
-The application itself can be modified to do whatever you want (or just leave it be). The basics:
+Zerowriter now has a menu system. It supports file functions: New, Save As, Load/Delete. It supports Gmail integration for emailing yourself files, but you should only use a burner account as info is stored in a json file. It can generate QR codes, connect to Wifi networks on-device, and host files for local access via a server.
 
-epd.init() clears the screen using slow look up tables -- this prevents artifacting
+An overclocked Pi Zero 2 W can handle running this stuff around 200ms. You might be able to squeeze performance with a better CPU, or maybe optimizing the buffer in the display driver. Currently, the buffer needs to calculate the entire screen buffer, even for partial updates.
 
-epd.init_Partial() runs a faster update using modified LUT. (Ben Krasnow: https://hackaday.com/2017/10/31/ben-krasnow-hacks-e-paper-for-fastest-refresh-rate/) -- important to note this only works with the 4.2" v1 waveshare display.
-
-Use a Pi Zero 2W. Don't use an original Zero. The extra power is very useful.
+Use a Pi Zero 2W. Don't use an original Zero.
 
 ----------
 
-Setup / Getting Started:
+Setup / Getting Started
+- requires pi zero 2w running linux 12 bookworm, light install recomend (headless/no GUI)
+- https://www.waveshare.com/wiki/4.2inch_e-Paper_Module_Manual refer to the waveshare guide for pinout. probably test with their code first to make sure display works.
+- (https://github.com/zerowriter/zerowriter1/blob/waveshare_2.2/setup_2.2)
 
-https://github.com/zerowriter/zerowriter1/blob/main/how-to-setup-your-pi
-
-- requires pi zero 2w running bookworm, light install recomend (headless/no GUI)
-- set up ssh and configure your pi zero remotely via terminal or powershell
-- Drop in the e-Paper folder provided in this repo and run main.py from ssh
-- Set up crontab (from command line: crontab -e) to boot to main.py
-
-Hardware Features:
+Hardware 
 - 40% keyboard and an eink display
 - tons of storage
 - bring-your-own-battery-pack: 10,000mah battery will yield around 25-30 hours of usage, a lot more if you cut networking
 - or just plug it into something
 - portable! stylish! cool! modified from the https://penkesu.computer/ penkesu computer
 
-Program Features:
-- light weight python typewriter
-- works with any USB keyboard
-- KEYMAPS file to edit key maps if you don't want to program your keyboard's firmware
-- files save in the /data directory where the program resides, access via SMB
-- autosaves the cache every time return is pressed
-- CTRL S saves the cache to a txt file
-- CTRL N starts a new file
-- CTRL ESC turns unit off.
-- (NEW, likely buggy) The arrow keys can be used to navigate through and review previous writing
-- You could easily add an output to google drive or etc
 
-===
-
-Have fun! Happy writing...
-
-===
-
-Steps to use a Bluetooth Keyboard
-
-1. Run `sudo bluetoothctl`
-2. Run `agent on`
-3. Run `default-agent`
-4. Run `scan on`
-5. Wait until you see your device listed (be sure your keyboard is in pairing mode)
-6. Run `scan off`
-7. Run `devices` to list known Bluetooth devices
-8. Run `pair AA:BB:CC:DD:EE:FF` where `AA:BB:CC:DD:EE:FF` is the MAC address of your bluetooth keyboard
-9. You may need to reboot your raspberry pi before python is able to register your bluetooth keyboard.
-
-https://www.youtube.com/watch?v=UEmSsscijKE has a video walkthrough of the above steps as well.
-
+Enjoy! Have fun. Happy writing.
