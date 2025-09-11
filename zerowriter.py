@@ -1,4 +1,6 @@
 import time
+from math import floor
+
 import keymaps
 import socket
 import shutil
@@ -8,7 +10,7 @@ import subprocess
 from PIL import Image, ImageDraw, ImageFont
 
 delay = .100 #standard delay v2.2, 2.1 can use 0
-font24 = ImageFont.truetype('./courier_prime.ttf', 18)
+font24 = ImageFont.truetype('./courier_prime.ttf', 24)
 
 class Menu:
     def __init__(self, display_draw, epd, display_image):
@@ -46,7 +48,7 @@ class Menu:
 
     def display(self):
 
-        self.display_draw.rectangle((0, 0, 400, 300), fill=255)
+        self.display_draw.rectangle((0, 0, 800, 480), fill=255)
         y_position = 10
         
         start_index = max(0, self.selected_item - 5)  # Start index for display
@@ -77,10 +79,10 @@ class Menu:
         return
 
     def partial_update(self):
-        self.display_draw.rectangle((0, 270, 400, 300), fill=255)  # Clear display
+        self.display_draw.rectangle((0, 450, 800, 480), fill=255)  # Clear display
         temp_content = self.inputlabel + ": " + self.input_content + self.ending_content
         # Draw input line text
-        self.display_draw.text((10, 270), str(temp_content), font=font24, fill=0)        
+        self.display_draw.text((10, 450), str(temp_content), font=font24, fill=0)
         partial_buffer = self.epd.getbuffer(self.display_image)
         self.epd.display_Partial(partial_buffer)
         time.sleep(delay)
@@ -99,14 +101,14 @@ class Menu:
 
     def consolemsg(self, text):
         time.sleep(delay)
-        self.display_draw.rectangle((0, 0, 400, 300), fill=255)  # Clear display
+        self.display_draw.rectangle((0, 0, 800, 480), fill=255)  # Clear display
         temp_content = text
         # Draw input line text
         self.display_draw.text((0, 150), str(temp_content), font=font24, fill=0)        
         partial_buffer = self.epd.getbuffer(self.display_image)
         self.epd.display_Partial(partial_buffer)
         time.sleep(2)
-        self.display_draw.rectangle((0, 0, 400, 300), fill=255)  # Clear display
+        self.display_draw.rectangle((0, 0, 800, 480), fill=255)  # Clear display
         partial_buffer = self.epd.getbuffer(self.display_image)
         self.epd.display_Partial(partial_buffer)
         time.sleep(delay)
@@ -120,12 +122,13 @@ class ZeroWriter:
         self.cursor_position = 0
         self.text_content = ""
         self.input_content = ""
-        self.previous_lines = []
         self.needs_display_update = False
-        self.chars_per_line = 32
-        self.lines_on_screen = 12
-        self.font_size = 18
-        self.line_spacing = 22
+        bbox = font24.getbbox("A")
+        width = bbox[2] - bbox[0]
+        height = bbox[3] - bbox[1]
+        self.chars_per_line = floor(780 / width)
+        self.lines_on_screen = floor(460 / height)
+        self.line_spacing = floor(height * 1.6)
         self.scrollindex = 1
         self.console_message = ""
         self.typing_last_time = 0
@@ -146,12 +149,6 @@ class ZeroWriter:
         self.display_image = Image.new('1', (self.epd.width, self.epd.height), 255)
         self.display_draw = ImageDraw.Draw(self.display_image)
         self.last_display_update = time.time()
-
-        #comment these two lines if you want to keep terminal interupts
-        #signal.signal(signal.SIGINT, signal.SIG_IGN)
-        #signal.signal(signal.SIGTSTP, signal.SIG_IGN)
-
-        self.start_server()
 
         self.keyboard.on_press(self.handle_key_press, suppress=True) #handles modifiers and shortcuts
         self.keyboard.on_release(self.handle_key_up, suppress=True)
@@ -180,15 +177,6 @@ class ZeroWriter:
         except Exception as e:
             return(e)
             print("error getting current SSID")
-
-    def start_server(self):
-        try:
-            print("starting data server...")
-            current_directory = os.path.join(os.getcwd(),"data")
-            subprocess.Popen(["python", "-m", "http.server", str(8000)], cwd=current_directory, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            self.server_address=str(socket.gethostname() + ".local:8000")
-        except Exception as e:
-            print("error starting server...")
 
     def show_load_menu(self):
         self.parent_menu = self.menu
@@ -226,11 +214,11 @@ class ZeroWriter:
             files.sort(key=lambda x: os.path.getmtime(os.path.join(data_folder_path, x)), reverse=True)
 
             self.load_menu.addItem("<- Back | Del: ctrl+bkspc", self.hide_child_menu, None)
-            self.load_menu.addItem("cache.txt autosave file", lambda f="cache.txt": self.load_file_into_previous_lines("cache.txt"), None)
+            self.load_menu.addItem("cache.txt autosave file", lambda f="cache.txt": self.load_text_content("cache.txt"), None)
 
             for filename in files:
                 if filename != "cache.txt":
-                    self.load_menu.addItem(filename, lambda f=filename: self.load_file_into_previous_lines(f), None)
+                    self.load_menu.addItem(filename, lambda f=filename: self.load_text_content(f), None)
         except Exception as e:
             self.load_menu.addItem("Error: "+{e}, self.hide_child_menu, None)
             print(f"Failed to list files in {data_folder_path}: {e}")
@@ -322,19 +310,19 @@ class ZeroWriter:
         self.console_message = text
         self.needs_display_update=True
 
-    def load_file_into_previous_lines(self, filename):
+    def load_text_content(self, filename):
         file_path = os.path.join(os.path.dirname(__file__), 'data', filename)
         try:
             with open(file_path, 'r') as file:
-                lines = file.readlines()
-                self.previous_lines = [line.strip() for line in lines]
-                self.input_content = ""
+                self.text_content = file.read()
+                self.input_content = None
                 self.cursor_position = 0
                 self.consolemsg(filename)
         except Exception as e:
             self.consolemsg(f"[Error loading file]")
         finally:
             self.hide_menu()
+            print(f"Loaded file: {filename}")
 
     def get_available_wifi_networks(self):
         try:
@@ -347,15 +335,15 @@ class ZeroWriter:
             return []
 
     def new_file(self):
-        self.save_previous_lines(self.cache_file_path, self.previous_lines)
-        self.previous_lines.clear()
+        self.save_content(self.cache_file_path, self.text_content)
+        self.text_content = ""
         self.input_content = ""
         self.consolemsg("[New]")
         self.hide_menu()
 
     def power_down(self):
         self.epd.Clear
-        self.display_draw.rectangle((0, 0, 400, 300), fill=255)  # Clear display
+        self.display_draw.rectangle((0, 0, 800, 480), fill=255)  # Clear display
         self.display_draw.text((55, 150), "ZeroWriter Powering Off", font=font24, fill=0)
         partial_buffer = self.epd.getbuffer(self.display_image)
         self.epd.display_Partial(partial_buffer)
@@ -365,7 +353,7 @@ class ZeroWriter:
         time.sleep(3)
         subprocess.run(['sudo', 'poweroff', '-f'])
 
-    def save_previous_lines(self, file_path, lines):
+    def save_content(self, file_path, text_content):
       try:
           # Ensure the directory exists
           os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -375,8 +363,8 @@ class ZeroWriter:
           # Clear the file content before writing
           with open(file_path, 'w') as file:
               print("Saving to file:", file_path)
-              for line in lines:
-                  file.write(line + '\n')
+              print(text_content[:10] + "...")
+              file.write(text_content)
       except IOError as e:
           self.consolemsg("[Error saving file]")
           print("Failed to save file:", e)
@@ -396,24 +384,47 @@ class ZeroWriter:
 
     def update_display(self):
         self.display_updating = True
-        self.display_draw.rectangle((0, 0, 400, 300), fill=255)
-        
-        # Display the previous lines
-        y_position = 270 - self.line_spacing  # leaves room for cursor input
+        self.display_draw.rectangle((0, 0, 800, 480), fill=255)
 
-        #Make a temp array from previous_lines. And then reverse it and display as usual.
-        current_line=max(0,len(self.previous_lines)-self.lines_on_screen*self.scrollindex)
-        temp=self.previous_lines[current_line:current_line+self.lines_on_screen]
-        # print(temp)# to debug if you change the font parameters (size, chars per line, etc)
+        print("About to display content: " + self.text_content[:10] + "...")
+        # Display the previous lines with soft-wrapping
+        if self.input_content is None:
+            y_position = 470 - self.line_spacing
+            paragraphs = self.text_content.split('\n')
+        elif len(self.input_content) > 0:
+            y_position = 470 - self.line_spacing * 2  # leaves room for cursor input
+            paragraphs = self.text_content[:-len(self.input_content)].split('\n')
+        else:
+            print("Input content exists but is empty")
+            y_position = 470 - self.line_spacing * 2
+            paragraphs = self.text_content.split('\n')
 
-        for line in reversed(temp[-self.lines_on_screen:]):
-          self.display_draw.text((10, y_position), line[:self.chars_per_line], font=font24, fill=0)
-          y_position -= self.line_spacing
+        if len(paragraphs) > 0 and paragraphs[-1] == "":
+            paragraphs = paragraphs[:-1]
+
+
+        print(f"Printing {len(paragraphs)} paragraphs")
+
+        # Build wrapped lines from logical lines (only newline on Enter)
+        all_wrapped = []
+        for logical_line in paragraphs:
+            all_wrapped.extend(self._wrap_text(logical_line, self.chars_per_line))
+
+        if self.input_content is None:
+            self.input_content = all_wrapped[-1]
+        # Determine the window of lines to show based on scrollindex
+        total = len(all_wrapped)
+        start_index = max(0, total - self.lines_on_screen * self.scrollindex)
+        visible = all_wrapped[start_index:start_index + self.lines_on_screen]
+
+        for line in reversed(visible[-self.lines_on_screen:]):
+            self.display_draw.text((10, y_position), line, font=font24, fill=0)
+            y_position -= self.line_spacing
 
         #Display Console Message
         if self.console_message != "":
-            self.display_draw.rectangle((300, 270, 400, 300), fill=255)
-            self.display_draw.text((200, 270), self.console_message, font=font24, fill=0)
+            self.display_draw.rectangle((600, 450, 800, 480), fill=255)
+            self.display_draw.text((400, 450), self.console_message, font=font24, fill=0)
             self.console_message = ""
         
         #generate display buffer for display
@@ -428,48 +439,83 @@ class ZeroWriter:
         if not self.updating_input_area and self.scrollindex==1:
             self.updating_input_area = True
             cursor_index = self.cursor_position
-            self.display_draw.rectangle((0, 270, 400, 300), fill=255)  # Clear display
+            self.display_draw.rectangle((0, 450, 800, 480), fill=255)  # Clear display
             temp_content = self.input_content[:cursor_index] + "|" + self.input_content[cursor_index:]
-            self.display_draw.text((10, 270), str(temp_content), font=font24, fill=0)
+            self.display_draw.text((10, 450), str(temp_content), font=font24, fill=0)
             #self.updating_input_area = True
             partial_buffer = self.epd.getbuffer(self.display_image)
             self.epd.display_Partial(partial_buffer)
             self.updating_input_area = False
 
+    def _wrap_text(self, text, width):
+        # Soft-wrap a single logical line to a list of lines each up to width characters,
+        # preferring to break at spaces; if a word exceeds width, hard-split it.
+        print("Wrapping line: " + text)
+        if width <= 0:
+            return [text]
+        words = text.split(' ')
+        lines = []
+        current = ''
+        for w in words:
+            if current == '':
+                # handle very long single word
+                while len(w) > width:
+                    lines.append(w[:width])
+                    w = w[width:]
+                current = w
+            else:
+                sep = ' '
+                candidate = current + sep + w
+                if len(candidate) <= width:
+                    current = candidate
+                else:
+                    lines.append(current)
+                    print("Added wrapped line: " + current)
+                    # place word on new line, splitting if necessary
+                    while len(w) > width:
+                        lines.append(w[:width])
+                        w = w[width:]
+                    current = w
+        if current != '':
+            lines.append(current)
+        # ensure at least one line
+        if not lines:
+            lines = ['']
+        return lines
+
+    def _all_wrapped_lines(self):
+        all_wrapped = []
+        paragraphs = self.text_content.split('\n')
+        for logical_line in paragraphs:
+            all_wrapped.extend(self._wrap_text(logical_line, self.chars_per_line))
+        return all_wrapped
+
     def insert_character(self, character):
-        cursor_index = self.cursor_position
-        
-        if cursor_index <= len(self.input_content):
-            # Insert character in the text_content string
-            self.input_content = self.input_content[:cursor_index] + character + self.input_content[cursor_index:]
-            self.cursor_position += 1  # Move the cursor forward
-        
-        #self.needs_input_update = True
+
+        self.text_content = self.text_content + character
+        self.input_content = self.input_content + character
+        if len(self.input_content) > self.chars_per_line:
+            print(f"Exceeded chars per line at {self.chars_per_line}")
+            last_space = self.input_content.rfind(' ')
+            if last_space != -1:  # if a space was found
+                self.input_content = self.input_content[last_space + 1:]
+                print("wrapped to next line, new input content is: " + self.input_content)
+            self.needs_display_update = True
+        self.cursor_position = len(self.input_content)
 
     def delete_character(self):
-        if self.cursor_position > 0:
-            # Remove the character at the cursor position
-            self.input_content = self.input_content[:self.cursor_position - 1] + self.input_content[self.cursor_position:]
-            self.cursor_position -= 1  # Move the cursor back
-            #self.needs_input_update = True
-        #No characters on the line, move up to previous line
-        elif len(self.previous_lines) > 0:
-            self.input_content = ""
-            self.input_content = self.previous_lines[len(self.previous_lines)-1]
-            self.previous_lines.pop(len(self.previous_lines)-1)
-            self.cursor_position = len(self.input_content)
-            self.needs_display_update = True
-
-    def delete_previous_word(self):
-        #find the location of the last word in the line
-        last_space = self.input_content.rstrip().rfind(' ', 0, self.chars_per_line)
-        sentence = ""
-        #Remove previous word
-        if last_space >= 0:
-            sentence = self.input_content[:last_space+1]
-        self.input_content = sentence
-        self.cursor_position = len(self.input_content) 
-        #self.needs_display_update = True
+        if len(self.text_content) > 0:
+            self.text_content = self.text_content[:len(self.text_content) - 1]
+            if len(self.input_content) > 0:
+                # Remove the character at the cursor position
+                self.input_content = self.input_content[:len(self.input_content) - 1]
+                self.cursor_position = len(self.input_content)  # Move the cursor back
+                # self.needs_input_update = True
+            #No characters on the line, move up to previous line
+            else:
+                self.input_content = self.text_content[len(self.text_content) - self.chars_per_line]
+                self.cursor_position = len(self.input_content)
+                self.needs_display_update = True
                 
     def handle_key_up(self, e): 
         if e.name == 'ctrl': #if control is released
@@ -479,20 +525,18 @@ class ZeroWriter:
 
     def save_file(self):
         timestamp = time.strftime("%m%d")  # Format: MMDD
-        prefix = ''.join(self.previous_lines)[:20]
+        prefix = ''.join(self.text_content)[:20]
         alphanum_prefix = ''.join(ch for ch in prefix if ch.isalnum())
         filename = os.path.join(os.path.dirname(__file__), 'data', f'{timestamp}_{alphanum_prefix}.txt')
-        self.previous_lines.append(self.input_content)
-        self.save_previous_lines(filename, self.previous_lines)
-        self.save_previous_lines(self.cache_file_path, self.previous_lines)
-        self.input_content = self.previous_lines.pop(len(self.previous_lines)-1)
+        self.save_content(filename, self.text_content)
+        self.save_content(self.cache_file_path, self.text_content)
         self.consolemsg("[Saved]")
 
     def save_as_file(self, userinput):
         self.hide_menu
         self.hide_child_menu
         filename = os.path.join(os.path.dirname(__file__), 'data', f'{userinput}.txt')
-        self.save_previous_lines(filename, self.previous_lines)
+        self.save_content(filename, self.text_content)
         self.menu.consolemsg("[Save As: ]" + f'{userinput}.txt')
         #self.consolemsg("[Save As: ]" + f'{userinput}.txt')
 
@@ -542,20 +586,26 @@ class ZeroWriter:
         if e.name == "esc":
             self.show_menu()
 
-        if e.name== "down" or e.name== "right" and self.display_updating==False:
+        if e.name== "down" and self.display_updating==False:
           self.scrollindex = self.scrollindex - 1
           if self.scrollindex < 1:
                 self.scrollindex = 1
-          self.consolemsg(f'[{round(len(self.previous_lines)/self.lines_on_screen)-self.scrollindex+1}/{round(len(self.previous_lines)/self.lines_on_screen)}]')
+          total_wrapped = len(self._all_wrapped_lines())
+          total_pages = max(1, (total_wrapped + self.lines_on_screen - 1)//self.lines_on_screen)
+          current_page = max(1, total_pages - self.scrollindex + 1)
+          self.consolemsg(f'[{current_page}/{total_pages}]')
           self.needs_display_update = True
           time.sleep(delay)
           
 
-        if e.name== "up" or e.name== "left" and self.display_updating==False:
+        if e.name== "up"and self.display_updating==False:
           self.scrollindex = self.scrollindex + 1
-          if self.scrollindex > round(len(self.previous_lines)/self.lines_on_screen+1):
-                self.scrollindex = round(len(self.previous_lines)/self.lines_on_screen+1)
-          self.consolemsg(f'[{round(len(self.previous_lines)/self.lines_on_screen)-self.scrollindex+1}/{round(len(self.previous_lines)/self.lines_on_screen)}]')
+          total_wrapped = len(self._all_wrapped_lines())
+          total_pages = max(1, (total_wrapped + self.lines_on_screen - 1)//self.lines_on_screen)
+          if self.scrollindex > total_pages+1:
+                self.scrollindex = total_pages+1
+          current_page = max(1, total_pages - self.scrollindex + 1)
+          self.consolemsg(f'[{current_page}/{total_pages}]')
           self.needs_display_update = True
           time.sleep(delay)
 
@@ -567,21 +617,6 @@ class ZeroWriter:
             self.new_file()
         if e.name == "r" and self.control_active: #ctrl+r slow refresh
             self.doReset = True
-        if e.name == "backspace" and self.control_active: #ctrl+backspace delete prev word
-            self.delete_previous_word()
-
-        if e.name == "tab": 
-            self.insert_character(" ")
-            self.insert_character(" ")
-            # Check if adding the character exceeds the line length limit
-            if self.cursor_position > self.chars_per_line:
-                self.previous_lines.append(self.input_content)                
-                # Update input_content to contain the remaining characters
-                self.input_content = ""
-                self.needs_display_update = True #trigger a display refresh
-            # Update cursor_position to the length of the remaining input_content
-            self.cursor_position = len(self.input_content)
-            #self.needs_input_update = True
             
         if e.name == "backspace":
             self.delete_character()
@@ -589,64 +624,25 @@ class ZeroWriter:
                 
         elif e.name == "space": #space bar
             self.insert_character(" ")
-            
-            # Check if adding the character exceeds the line length limit
-            if self.cursor_position > self.chars_per_line:
-                self.previous_lines.append(self.input_content)                
-                self.input_content = ""
-                self.needs_display_update = True
-            # Update cursor_position to the length of the remaining input_content
-            self.cursor_position = len(self.input_content)
-            #self.needs_input_update = True
-        
+            # Soft wrapping only happens at render; do not modify stored lines here
+
         elif e.name == "enter":
-            if self.scrollindex>1:
-                #if you were reviewing text, jump to scrollindex=1
-                self.scrollindex = 1
-                time.sleep(delay)
-                self.update_display()
-                time.sleep(delay)
                 
-            else:
-                # Add the input to the previous_lines array
-                self.previous_lines.append(self.input_content)
-                self.input_content = "" #clears input content
-                self.cursor_position=0
-                #save the file when enter is pressed
-                self.save_previous_lines(self.cache_file_path, self.previous_lines)
-                self.needs_display_update = True
+            # Add the input to the previous_lines array
+            self.text_content = self.text_content + "\n"
+            self.input_content = "" #clears input content
+            self.cursor_position = 0
+            #save the file when enter is pressed
+            self.save_content(self.cache_file_path, self.text_content)
+            print("Hit enter, now the text is: " + self.text_content[:10] + "...")
+            self.needs_display_update = True
             
         if len(e.name) == 1 and self.control_active == False:  # letter and number input
             if self.shift_active:
                 char = keymaps.shift_mapping.get(e.name)
-                self.input_content += char
+                self.insert_character(char)
             else:
-                self.input_content += e.name
-
-            self.cursor_position += 1
-            #self.needs_input_update = True
-
-            # Check if adding the character exceeds the line length limit
-            if self.cursor_position > self.chars_per_line:
-                # Find the last space character before the line length limit
-                last_space = self.input_content.rfind(' ', 0, self.chars_per_line)
-                if last_space >= 0:
-                    sentence = self.input_content[:last_space]
-                    # Append the sentence to the previous lines
-                    self.previous_lines.append(sentence)
-
-                    # Update input_content to contain the remaining characters
-                    self.input_content = self.input_content[last_space + 1:]
-                    self.needs_display_update=True
-                else:
-                    #There are no spaces in this line so input should move to next line
-                    self.previous_lines.append(self.input_content[0:self.chars_per_line])
-                    temp = self.input_content[-1]
-                    self.input_content = temp
-                    self.needs_display_update=True
-
-            # Update cursor_position to the length of the remaining input_content
-            self.cursor_position = len(self.input_content)                
+                self.insert_character(e.name)
             
         self.typing_last_time = time.time()
         #self.needs_input_update = True
@@ -679,12 +675,13 @@ class ZeroWriter:
             time.sleep(delay) #*2?
             self.typing_last_time = time.time()
 
-        elif (time.time()-self.typing_last_time)<(.6):
+        elif (time.time()-self.typing_last_time)< 1:
             if not self.updating_input_area and not self.menu_mode and self.scrollindex==1:
                 self.update_input_area()
 
     def run(self):
-        self.load_file_into_previous_lines("cache.txt")
+        self.load_text_content("cache.txt")
+        self.update_display()
         while True:
             self.loop()
             # This small sleep prevents zerowriter from consuming 100% cpu
