@@ -100,14 +100,13 @@ class Menu:
         self.display()
 
     def consolemsg(self, text):
-        time.sleep(delay)
         self.display_draw.rectangle((0, 0, 800, 480), fill=255)  # Clear display
         temp_content = text
         # Draw input line text
         self.display_draw.text((0, 150), str(temp_content), font=font24, fill=0)        
         partial_buffer = self.epd.getbuffer(self.display_image)
         self.epd.display_Partial(partial_buffer)
-        time.sleep(2)
+        time.sleep(delay)
         self.display_draw.rectangle((0, 0, 800, 480), fill=255)  # Clear display
         partial_buffer = self.epd.getbuffer(self.display_image)
         self.epd.display_Partial(partial_buffer)
@@ -140,8 +139,24 @@ class ZeroWriter:
         self.manual_network=""
         self.parent_menu = None # used to store the menu that was open before the load menu was opened
         self.server_address = "not active"
-        self.cache_file_path = os.path.join(os.path.dirname(__file__), 'data', 'cache.txt')
+        self.current_file_path = None
         self.doReset = False
+
+    def get_storage_dir(self):
+        # Use the user's Documents folder to store files outside the app folder
+        base = os.path.join(os.path.expanduser("~"), "Documents", "Drafty")
+        try:
+            os.makedirs(base, exist_ok=True)
+        except Exception:
+            # Fallback to home directory if Documents does not exist
+            base = os.path.join(os.path.expanduser("~"), "Drafty")
+            os.makedirs(base, exist_ok=True)
+        return base
+
+    def get_archive_dir(self):
+        archive = os.path.join(self.get_storage_dir(), "archive")
+        os.makedirs(archive, exist_ok=True)
+        return archive
 
     def initialize(self):
         self.epd.init()
@@ -208,17 +223,15 @@ class ZeroWriter:
 
     def populate_load_menu(self):
         self.load_menu.menu_items.clear()
-        data_folder_path = os.path.join(os.path.dirname(__file__), 'data')
+        data_folder_path = self.get_storage_dir()
         try:
             files = [f for f in os.listdir(data_folder_path) if os.path.isfile(os.path.join(data_folder_path, f)) and f.endswith('.txt')]
             files.sort(key=lambda x: os.path.getmtime(os.path.join(data_folder_path, x)), reverse=True)
 
             self.load_menu.addItem("<- Back | Del: ctrl+bkspc", self.hide_child_menu, None)
-            self.load_menu.addItem("cache.txt autosave file", lambda f="cache.txt": self.load_text_content("cache.txt"), None)
 
             for filename in files:
-                if filename != "cache.txt":
-                    self.load_menu.addItem(filename, lambda f=filename: self.load_text_content(f), None)
+                self.load_menu.addItem(filename, lambda f=filename: self.load_text_content(f), None)
         except Exception as e:
             self.load_menu.addItem("Error: "+{e}, self.hide_child_menu, None)
             print(f"Failed to list files in {data_folder_path}: {e}")
@@ -226,10 +239,10 @@ class ZeroWriter:
     def move_to_archive(self):
         selected_item = self.load_menu.menu_items[self.load_menu.selected_item]['text']
         try:
-            if selected_item not in ["<- Back | Del: ctrl+bkspc", "cache.txt autosave file"]:  # Ensure it's not a special menu item
-                selected_file = os.path.join(os.path.dirname(__file__), 'data', selected_item)
+            if selected_item not in ["<- Back | Del: ctrl+bkspc"]:  # Ensure it's not a special menu item
+                selected_file = os.path.join(self.get_storage_dir(), selected_item)
                 print(selected_file)
-                shutil.move(selected_file, os.path.join(os.path.dirname(__file__), 'data/archive'))
+                shutil.move(selected_file, self.get_archive_dir())
                 print(f"Moved {selected_item} to Archive folder.")
                 self.menu.consolemsg(f"Deleted {selected_item}.")
                 self.populate_load_menu()
@@ -311,12 +324,13 @@ class ZeroWriter:
         self.needs_display_update=True
 
     def load_text_content(self, filename):
-        file_path = os.path.join(os.path.dirname(__file__), 'data', filename)
+        file_path = os.path.join(self.get_storage_dir(), filename)
         try:
             with open(file_path, 'r') as file:
                 self.text_content = file.read()
                 self.input_content = None
                 self.cursor_position = 0
+                self.current_file_path = file_path
                 self.consolemsg(filename)
         except Exception as e:
             self.consolemsg(f"[Error loading file]")
@@ -335,11 +349,29 @@ class ZeroWriter:
             return []
 
     def new_file(self):
-        self.save_content(self.cache_file_path, self.text_content)
-        self.text_content = ""
-        self.input_content = ""
-        self.consolemsg("[New]")
-        self.hide_menu()
+        # Prompt for a new filename and create a new, intentional file
+        self.menu.save_as()  # reuse prompt UI ("File Name")
+        # Set the callback on the currently highlighted menu item to create a new file
+        # Ensure the New menu item is selected; however, callback uses selected item's callback.
+        # To guarantee behavior, temporarily replace the selected item's callback.
+        self.menu.menu_items[self.menu.selected_item]['callback'] = lambda: self.new_file_named(self.menu.input_content)
+
+    def new_file_named(self, userinput):
+        filename = os.path.join(self.get_storage_dir(), f'{userinput}.txt')
+        self.current_file_path = filename
+        # Reset current buffer for a new file
+        # Create the empty file (intentional)
+        try:
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            with open(filename, 'a'):
+                pass
+            self.menu.consolemsg("[New: ]" + f'{userinput}.txt')
+        except Exception as e:
+            self.menu.consolemsg("[Error creating file]")
+        finally:
+            self.text_content = ""
+            self.input_content = ""
+            self.hide_menu()
 
     def power_down(self):
         self.epd.Clear
@@ -370,7 +402,7 @@ class ZeroWriter:
           print("Failed to save file:", e)
 
     def hide_menu(self):
-        time.sleep(delay*2)
+        time.sleep(delay)
         self.menu_mode = False
         self.needs_display_update = True
 
@@ -524,21 +556,23 @@ class ZeroWriter:
             self.shift_active = False
 
     def save_file(self):
-        timestamp = time.strftime("%m%d")  # Format: MMDD
-        prefix = ''.join(self.text_content)[:20]
-        alphanum_prefix = ''.join(ch for ch in prefix if ch.isalnum())
-        filename = os.path.join(os.path.dirname(__file__), 'data', f'{timestamp}_{alphanum_prefix}.txt')
-        self.save_content(filename, self.text_content)
-        self.save_content(self.cache_file_path, self.text_content)
-        self.consolemsg("[Saved]")
+        # Save to the current intentional file if set; otherwise prompt user to name the file
+        if self.current_file_path:
+            self.save_content(self.current_file_path, self.text_content)
+            self.consolemsg("[Saved]")
+        else:
+            # Prompt user to name the file (intentional save)
+            self.menu.save_as()
+            # After user enters a name, save and set current file
+            self.menu.menu_items[self.menu.selected_item]['callback'] = lambda: self.save_as_file(self.menu.input_content)
 
     def save_as_file(self, userinput):
         self.hide_menu
         self.hide_child_menu
-        filename = os.path.join(os.path.dirname(__file__), 'data', f'{userinput}.txt')
+        filename = os.path.join(self.get_storage_dir(), f'{userinput}.txt')
+        self.current_file_path = filename
         self.save_content(filename, self.text_content)
         self.menu.consolemsg("[Save As: ]" + f'{userinput}.txt')
-        #self.consolemsg("[Save As: ]" + f'{userinput}.txt')
 
     def handle_key_press(self, e):
         if e.name == 'ctrl': #if control is pressed
@@ -632,8 +666,9 @@ class ZeroWriter:
             self.text_content = self.text_content + "\n"
             self.input_content = "" #clears input content
             self.cursor_position = 0
-            #save the file when enter is pressed
-            self.save_content(self.cache_file_path, self.text_content)
+            # autosave to the current intentional file if one is set
+            if self.current_file_path:
+                self.save_content(self.current_file_path, self.text_content)
             print("Hit enter, now the text is: " + self.text_content[:10] + "...")
             self.needs_display_update = True
             
@@ -680,7 +715,8 @@ class ZeroWriter:
                 self.update_input_area()
 
     def run(self):
-        self.load_text_content("cache.txt")
+        # Start with no file loaded; prompt user to Load or create New via the menu
+        self.show_menu()
         self.update_display()
         while True:
             self.loop()
