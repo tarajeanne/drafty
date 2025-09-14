@@ -191,7 +191,6 @@ class ZeroWriter:
             return data_strings
         except Exception as e:
             return(e)
-            print("error getting current SSID")
 
     def show_load_menu(self):
         self.parent_menu = self.menu
@@ -241,7 +240,6 @@ class ZeroWriter:
         try:
             if selected_item not in ["<- Back | Del: ctrl+bkspc"]:  # Ensure it's not a special menu item
                 selected_file = os.path.join(self.get_storage_dir(), selected_item)
-                print(selected_file)
                 shutil.move(selected_file, self.get_archive_dir())
                 print(f"Moved {selected_item} to Archive folder.")
                 self.menu.consolemsg(f"Deleted {selected_item}.")
@@ -395,7 +393,6 @@ class ZeroWriter:
           # Clear the file content before writing
           with open(file_path, 'w') as file:
               print("Saving to file:", file_path)
-              print(text_content[:10] + "...")
               file.write(text_content)
       except IOError as e:
           self.consolemsg("[Error saving file]")
@@ -418,7 +415,6 @@ class ZeroWriter:
         self.display_updating = True
         self.display_draw.rectangle((0, 0, 800, 480), fill=255)
 
-        print("About to display content: " + self.text_content[:10] + "...")
         # Display the previous lines with soft-wrapping
         if self.input_content is None:
             y_position = 470 - self.line_spacing
@@ -427,15 +423,11 @@ class ZeroWriter:
             y_position = 470 - self.line_spacing * 2  # leaves room for cursor input
             paragraphs = self.text_content[:-len(self.input_content)].split('\n')
         else:
-            print("Input content exists but is empty")
             y_position = 470 - self.line_spacing * 2
             paragraphs = self.text_content.split('\n')
 
         if len(paragraphs) > 0 and paragraphs[-1] == "":
             paragraphs = paragraphs[:-1]
-
-
-        print(f"Printing {len(paragraphs)} paragraphs")
 
         # Build wrapped lines from logical lines (only newline on Enter)
         all_wrapped = []
@@ -482,7 +474,6 @@ class ZeroWriter:
     def _wrap_text(self, text, width):
         # Soft-wrap a single logical line to a list of lines each up to width characters,
         # preferring to break at spaces; if a word exceeds width, hard-split it.
-        print("Wrapping line: " + text)
         if width <= 0:
             return [text]
         words = text.split(' ')
@@ -502,7 +493,6 @@ class ZeroWriter:
                     current = candidate
                 else:
                     lines.append(current)
-                    print("Added wrapped line: " + current)
                     # place word on new line, splitting if necessary
                     while len(w) > width:
                         lines.append(w[:width])
@@ -527,11 +517,9 @@ class ZeroWriter:
         self.text_content = self.text_content + character
         self.input_content = self.input_content + character
         if len(self.input_content) > self.chars_per_line:
-            print(f"Exceeded chars per line at {self.chars_per_line}")
             last_space = self.input_content.rfind(' ')
             if last_space != -1:  # if a space was found
                 self.input_content = self.input_content[last_space + 1:]
-                print("wrapped to next line, new input content is: " + self.input_content)
             self.needs_display_update = True
         self.cursor_position = len(self.input_content)
 
@@ -669,7 +657,6 @@ class ZeroWriter:
             # autosave to the current intentional file if one is set
             if self.current_file_path:
                 self.save_content(self.current_file_path, self.text_content)
-            print("Hit enter, now the text is: " + self.text_content[:10] + "...")
             self.needs_display_update = True
             
         if len(e.name) == 1 and self.control_active == False:  # letter and number input
